@@ -1,0 +1,11 @@
+assets/
+build/
+output/
+test_secret.txt
+*.exe
+*.o
+*.obj
+.vs/
+.vscode/
+Thumbs.db
+.DS_Store
