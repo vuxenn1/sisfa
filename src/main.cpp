@@ -1,14 +1,15 @@
-#include "stb_image.h"
-#include "steganography.h"
-#include "vault.h"
-
 #include <iostream>
 #include <fstream>
 #include <filesystem>
 #include <string>
+#include "stb_image.h"
+#include "steganography.h"
+#include "vault.h"
+#include "stb_image.h"
+#include "steganography.h"
+#include "vault.h"
 
-// helpers
-
+// helper functions
 static std::string prompt(const std::string& msg)
 {
     std::cout << msg;
