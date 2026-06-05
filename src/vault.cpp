@@ -12,7 +12,7 @@ namespace fs = std::filesystem;
 
 // Magic bytes that identify a SISFA vault payload
 static const uint8_t MAGIC[4] = {'S', 'I', 'S', 'F'};
-static const uint8_t VERSION   = 1;
+static const uint8_t VERSION   = 2;
 
 // helpers
 
@@ -65,31 +65,32 @@ bool embedVault(const std::string& carrierImagePath,
         return false;
     }
 
-    // 4. Encrypt secret bytes
-    std::vector<uint8_t> encrypted = encryptData(secretBytes, password);
+    // 4. Build plaintext blob: [filename_len(2)][filename][filedata]
+    uint16_t filenameLen = static_cast<uint16_t>(filename.size());
+
+    std::vector<uint8_t> plainBlob;
+    // filename length (2 bytes, big-endian)
+    plainBlob.push_back(static_cast<uint8_t>(filenameLen >> 8));
+    plainBlob.push_back(static_cast<uint8_t>(filenameLen & 0xFF));
+    // filename
+    plainBlob.insert(plainBlob.end(), filename.begin(), filename.end());
+    // actual file bytes
+    plainBlob.insert(plainBlob.end(), secretBytes.begin(), secretBytes.end());
+
+    // 5. Encrypt the entire blob (filename + filedata together)
+    std::vector<uint8_t> encrypted = encryptData(plainBlob, password);
     if (encrypted.empty())
     {
         std::cout << "ERROR: Encryption failed." << std::endl;
         return false;
     }
 
-    // 5. Build payload
-    uint16_t filenameLen = static_cast<uint16_t>(filename.size());
-
+    // 6. Build final payload: [magic][version][encrypted blob]
     std::vector<uint8_t> payload;
-    // magic
     payload.insert(payload.end(), MAGIC, MAGIC + 4);
-    // version
     payload.push_back(VERSION);
-    // filename length (2 bytes, big-endian)
-    payload.push_back(static_cast<uint8_t>(filenameLen >> 8));
-    payload.push_back(static_cast<uint8_t>(filenameLen & 0xFF));
-    // filename
-    payload.insert(payload.end(), filename.begin(), filename.end());
-    // encrypted blob
     payload.insert(payload.end(), encrypted.begin(), encrypted.end());
 
-    // 6. Final capacity check with real payload size
     if (payload.size() * 8 + 32 > pixels.size())
     {
         std::cout << "ERROR: Payload is too large for this image.\n"
@@ -154,7 +155,7 @@ VaultResult extractVault(const std::string& stegoImagePath,
         return result;
     }
 
-    // 4. Parse header
+    // 4. Parse header — new format: [magic(4)][version(1)][encrypted blob]
     size_t offset = 4;
     uint8_t version = payload[offset++];
 
@@ -164,30 +165,37 @@ VaultResult extractVault(const std::string& stegoImagePath,
         return result;
     }
 
-    uint16_t filenameLen = (static_cast<uint16_t>(payload[offset]) << 8) | payload[offset + 1];
-    offset += 2;
-
-    if (offset + filenameLen > payload.size())
-    {
-        result.error = "Vault header is corrupted.";
-        return result;
-    }
-
-    std::string filename(payload.begin() + offset, payload.begin() + offset + filenameLen);
-    offset += filenameLen;
-
-    // 5. Decrypt the encrypted blob
+    // 5. Decrypt the entire blob
     std::vector<uint8_t> encryptedBlob(payload.begin() + offset, payload.end());
     std::vector<uint8_t> decrypted = decryptData(encryptedBlob, password);
 
     if (decrypted.empty())
     {
-        result.error = "Decryption failed. Wrong password or corrupted vault.";
+        result.error = "Wrong password or corrupted vault.";
         return result;
     }
 
+    // 6. Parse decrypted blob: [filename_len(2)][filename][filedata]
+    if (decrypted.size() < 2)
+    {
+        result.error = "Decrypted blob too small - corrupted vault.";
+        return result;
+    }
+
+    uint16_t filenameLen = (static_cast<uint16_t>(decrypted[0]) << 8) | decrypted[1];
+    offset = 2;
+
+    if (offset + filenameLen > decrypted.size())
+    {
+        result.error = "Filename length corrupted.";
+        return result;
+    }
+
+    std::string filename(decrypted.begin() + offset, decrypted.begin() + offset + filenameLen);
+    offset += filenameLen;
+
     result.success  = true;
     result.filename = filename;
-    result.data     = std::move(decrypted);
+    result.data     = std::vector<uint8_t>(decrypted.begin() + offset, decrypted.end());
     return result;
 }

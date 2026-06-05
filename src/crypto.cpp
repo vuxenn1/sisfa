@@ -1,12 +1,14 @@
 #include "crypto.h"
 #include <openssl/evp.h>
 #include <openssl/rand.h>
+#include <openssl/hmac.h>
 #include <iostream>
 
 const int KEY_SIZE = 32;                // 256 bits for AES-256
 const int IV_SIZE = 16;                 // 128 bits for AES block size
 const int SALT_SIZE = 16;               // 128 bits for salt
 const int PBKDF2_ITERATIONS = 600000;   // Number of iterations for PBKDF2
+const int HMAC_SIZE = 32;               // SHA-256 produces 32 bytes
 
 std::vector<uint8_t> encryptData(const std::vector<uint8_t>& plainData, const std::string& password)
 {
@@ -67,28 +69,45 @@ std::vector<uint8_t> encryptData(const std::vector<uint8_t>& plainData, const st
 
     EVP_CIPHER_CTX_free(ctx);
 
-    // Final format: [salt (16 bytes)][iv (16 bytes)][encrypted data]
-    // We store salt and IV at the front so decryption can find them
+    // Build intermediate output: [salt][iv][ciphertext]
     std::vector<uint8_t> output;
     output.insert(output.end(), salt.begin(), salt.end());
     output.insert(output.end(), iv.begin(), iv.end());
     output.insert(output.end(), cipherText.begin(), cipherText.end());
 
+    // Compute HMAC-SHA256 over [salt][iv][ciphertext] using the derived key
+    std::vector<uint8_t> hmac(HMAC_SIZE);
+    unsigned int hmacLen = 0;
+
+    HMAC(
+        EVP_sha256(),       // hash algorithm
+        key.data(),         // secret key (our PBKDF2 derived key)
+        KEY_SIZE,           // key length
+        output.data(),      // data to authenticate
+        output.size(),      // data length
+        hmac.data(),        // output buffer
+        &hmacLen            // output length
+    );
+
+    // Final format: [salt(16)][iv(16)][ciphertext][hmac(32)]
+    output.insert(output.end(), hmac.begin(), hmac.end());
+
     return output;
 }
 std::vector<uint8_t> decryptData(const std::vector<uint8_t>& encryptedData, const std::string& password)
 {
-    // We need at least salt + IV bytes to even start
-    if (encryptedData.size() < SALT_SIZE + IV_SIZE)
+    // We need at least salt + IV + HMAC bytes to even start
+    if (encryptedData.size() < SALT_SIZE + IV_SIZE + HMAC_SIZE)
     {
         std::cout << "ERROR: Data too small to be valid!" << std::endl;
         return {};
     }
 
-    // Remember our format: [salt (16)][iv (16)][encrypted data]
+    // Format: [salt(16)][iv(16)][ciphertext][hmac(32)]
     std::vector<uint8_t> salt(encryptedData.begin(), encryptedData.begin() + SALT_SIZE);
     std::vector<uint8_t> iv(encryptedData.begin() + SALT_SIZE, encryptedData.begin() + SALT_SIZE + IV_SIZE);
-    std::vector<uint8_t> cipherText(encryptedData.begin() + SALT_SIZE + IV_SIZE, encryptedData.end());
+    std::vector<uint8_t> storedHmac(encryptedData.end() - HMAC_SIZE, encryptedData.end());
+    std::vector<uint8_t> cipherText(encryptedData.begin() + SALT_SIZE + IV_SIZE, encryptedData.end() - HMAC_SIZE);
 
     std::vector<uint8_t> key(KEY_SIZE);
 
@@ -102,6 +121,38 @@ std::vector<uint8_t> decryptData(const std::vector<uint8_t>& encryptedData, cons
         KEY_SIZE,
         key.data()
     );
+
+    // Verify HMAC before attempting decryption
+    // Recompute HMAC over [salt][iv][ciphertext]
+    std::vector<uint8_t> dataToVerify;
+    dataToVerify.insert(dataToVerify.end(), salt.begin(), salt.end());
+    dataToVerify.insert(dataToVerify.end(), iv.begin(), iv.end());
+    dataToVerify.insert(dataToVerify.end(), cipherText.begin(), cipherText.end());
+
+    std::vector<uint8_t> computedHmac(HMAC_SIZE);
+    unsigned int hmacLen = 0;
+
+    HMAC(
+        EVP_sha256(),
+        key.data(),
+        KEY_SIZE,
+        dataToVerify.data(),
+        dataToVerify.size(),
+        computedHmac.data(),
+        &hmacLen
+    );
+
+    // Compare stored HMAC with computed HMAC
+    // We use a byte-by-byte loop instead of == to prevent timing attacks
+    uint8_t diff = 0;
+    for (int i = 0; i < HMAC_SIZE; i++)
+        diff |= storedHmac[i] ^ computedHmac[i];
+
+    if (diff != 0)
+    {
+        std::cout << "ERROR: HMAC verification failed! Data was tampered with." << std::endl;
+        return {};
+    }
 
     EVP_CIPHER_CTX* ctx = EVP_CIPHER_CTX_new();
     if (ctx == nullptr)

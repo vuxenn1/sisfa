@@ -69,6 +69,7 @@ std::vector<uint8_t> extractData(const std::vector<uint8_t>& pixels)
 
     std::cout << "Extracting " << dataSize << " bytes..." << std::endl;
     std::vector<uint8_t> secretData;
+    secretData.reserve(dataSize);
 
     for(uint32_t i=0; i < dataSize; i++)
     {
