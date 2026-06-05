@@ -3,10 +3,10 @@
 #include <openssl/rand.h>
 #include <iostream>
 
-const int KEY_SIZE = 32; // 256 bits for AES-256
-const int IV_SIZE = 16;  // 128 bits for AES block size
-const int SALT_SIZE = 16; // 128 bits for salt
-const int PBKDF2_ITERATIONS = 100000;
+const int KEY_SIZE = 32;                // 256 bits for AES-256
+const int IV_SIZE = 16;                 // 128 bits for AES block size
+const int SALT_SIZE = 16;               // 128 bits for salt
+const int PBKDF2_ITERATIONS = 600000;   // Number of iterations for PBKDF2
 
 std::vector<uint8_t> encryptData(const std::vector<uint8_t>& plainData, const std::string& password)
 {

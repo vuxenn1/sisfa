@@ -72,7 +72,7 @@ std::vector<uint8_t> extractData(const std::vector<uint8_t>& pixels)
 
     for(uint32_t i=0; i < dataSize; i++)
     {
-        uint32_t byte{0};
+        uint8_t byte{0};
 
         for(int bit=7; bit >= 0; bit--)
         {

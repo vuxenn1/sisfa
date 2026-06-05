@@ -16,4 +16,4 @@ add_executable(SISFA
     src/vault.cpp
 )
 
-target_link_libraries(SISFA OpenSSL::SSL OpenSSL::Crypto)
+target_link_libraries(SISFA OpenSSL::Crypto)

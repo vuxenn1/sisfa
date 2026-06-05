@@ -5,9 +5,6 @@
 #include "stb_image.h"
 #include "steganography.h"
 #include "vault.h"
-#include "stb_image.h"
-#include "steganography.h"
-#include "vault.h"
 
 // helper functions
 static std::string prompt(const std::string& msg)

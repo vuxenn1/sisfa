@@ -25,15 +25,6 @@ static std::vector<uint8_t> readFile(const std::string& path)
                                 std::istreambuf_iterator<char>());
 }
 
-static bool writeFile(const std::string& path, const std::vector<uint8_t>& data)
-{
-    std::ofstream f(path, std::ios::binary);
-    if (!f)
-        return false;
-    f.write(reinterpret_cast<const char*>(data.data()), data.size());
-    return f.good();
-}
-
 bool embedVault(const std::string& carrierImagePath,
                 const std::string& secretFilePath,
                 const std::string& password,
@@ -56,8 +47,11 @@ bool embedVault(const std::string& carrierImagePath,
         return false;
     }
 
-    std::vector<uint8_t> pixels(rawPixels, rawPixels + (width * height * 3));
+    std::vector<uint8_t> pixels(rawPixels, rawPixels + (static_cast<size_t>(width) * height * 3));
     stbi_image_free(rawPixels);
+
+    // Get just the filename without the path
+    std::string filename = fs::path(secretFilePath).filename().string();
 
     // 3. Check capacity early (before encrypting)
     // Rough estimate: payload = header overhead + encrypted size (~secretBytes + 48 for salt/iv/padding)
@@ -80,8 +74,6 @@ bool embedVault(const std::string& carrierImagePath,
     }
 
     // 5. Build payload
-    // Extract just the filename (not the full path) to store inside the vault
-    std::string filename = fs::path(secretFilePath).filename().string();
     uint16_t filenameLen = static_cast<uint16_t>(filename.size());
 
     std::vector<uint8_t> payload;
@@ -143,7 +135,7 @@ VaultResult extractVault(const std::string& stegoImagePath,
         return result;
     }
 
-    std::vector<uint8_t> pixels(rawPixels, rawPixels + (width * height * 3));
+    std::vector<uint8_t> pixels(rawPixels, rawPixels + (static_cast<size_t>(width) * height * 3));
     stbi_image_free(rawPixels);
 
     // 2. Extract raw payload
@@ -164,13 +156,18 @@ VaultResult extractVault(const std::string& stegoImagePath,
 
     // 4. Parse header
     size_t offset = 4;
-    uint8_t version = payload[offset++]; // version (currently unused, reserved for future)
-    (void)version;
+    uint8_t version = payload[offset++];
+
+    if (version != VERSION)
+    {
+        result.error = "Unsupported vault version: " + std::to_string(version);
+        return result;
+    }
 
     uint16_t filenameLen = (static_cast<uint16_t>(payload[offset]) << 8) | payload[offset + 1];
     offset += 2;
 
-    if (offset + filenameLen >= payload.size())
+    if (offset + filenameLen > payload.size())
     {
         result.error = "Vault header is corrupted.";
         return result;
