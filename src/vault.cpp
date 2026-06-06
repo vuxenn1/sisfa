@@ -10,19 +10,60 @@
 
 namespace fs = std::filesystem;
 
-// Magic bytes that identify a SISFA vault payload
 static const uint8_t MAGIC[4] = {'S', 'I', 'S', 'F'};
-static const uint8_t VERSION   = 2;
+static const uint8_t VERSION  = 2;
 
-// helpers
-
-static std::vector<uint8_t> readFile(const std::string& path)
+// Read a file into bytes directly using fs::path (handles UTF-8 paths)
+static std::vector<uint8_t> readFile(const fs::path& path)
 {
     std::ifstream f(path, std::ios::binary);
-    if (!f)
-        return {};
+    if (!f) return {};
     return std::vector<uint8_t>(std::istreambuf_iterator<char>(f),
                                 std::istreambuf_iterator<char>());
+}
+
+// Load image from path that may contain Unicode characters
+static uint8_t* loadImage(const fs::path& path, int* width, int* height, int* channels)
+{
+    std::vector<uint8_t> fileBytes = readFile(path);
+    if (fileBytes.empty()) return nullptr;
+    return stbi_load_from_memory(
+        fileBytes.data(),
+        static_cast<int>(fileBytes.size()),
+        width, height, channels, 3
+    );
+}
+
+// Callback for stbi_write_png_to_func — appends bytes to a vector
+static void pngWriteCallback(void* context, void* data, int size)
+{
+    auto* buffer = reinterpret_cast<std::vector<uint8_t>*>(context);
+    auto* bytes  = reinterpret_cast<uint8_t*>(data);
+    buffer->insert(buffer->end(), bytes, bytes + size);
+}
+
+// Save image to path that may contain Unicode characters
+static bool saveImage(const fs::path& path, int width, int height, std::vector<uint8_t>& pixels)
+{
+    // Write PNG to memory buffer using callback
+    std::vector<uint8_t> pngBuffer;
+    int result = stbi_write_png_to_func(
+        pngWriteCallback,
+        &pngBuffer,
+        width, height,
+        3,
+        pixels.data(),
+        width * 3
+    );
+
+    if (!result || pngBuffer.empty()) return false;
+
+    // Write buffer to file using fs::path (handles Unicode)
+    std::ofstream f(path, std::ios::binary);
+    if (!f) return false;
+
+    f.write(reinterpret_cast<const char*>(pngBuffer.data()), pngBuffer.size());
+    return f.good();
 }
 
 bool embedVault(const std::string& carrierImagePath,
@@ -30,17 +71,22 @@ bool embedVault(const std::string& carrierImagePath,
                 const std::string& password,
                 const std::string& outputImagePath)
 {
-    // 1. Read secret file
-    std::vector<uint8_t> secretBytes = readFile(secretFilePath);
+    // Convert all paths to fs::path using u8path (handles Turkish/Unicode chars)
+    fs::path carrierPath = fs::u8path(carrierImagePath);
+    fs::path secretPath  = fs::u8path(secretFilePath);
+    fs::path outputPath  = fs::u8path(outputImagePath);
+
+    // Read secret file
+    std::vector<uint8_t> secretBytes = readFile(secretPath);
     if (secretBytes.empty())
     {
         std::cout << "ERROR: Could not read secret file: " << secretFilePath << std::endl;
         return false;
     }
 
-    // 2. Load carrier image
+    // Load carrier image
     int width, height, channels;
-    uint8_t* rawPixels = stbi_load(carrierImagePath.c_str(), &width, &height, &channels, 3);
+    uint8_t* rawPixels = loadImage(carrierPath, &width, &height, &channels);
     if (!rawPixels)
     {
         std::cout << "ERROR: Could not load image: " << carrierImagePath << std::endl;
@@ -50,34 +96,28 @@ bool embedVault(const std::string& carrierImagePath,
     std::vector<uint8_t> pixels(rawPixels, rawPixels + (static_cast<size_t>(width) * height * 3));
     stbi_image_free(rawPixels);
 
-    // Get just the filename without the path
-    std::string filename = fs::path(secretFilePath).filename().string();
+    // Get filename only (no full path)
+    std::string filename    = secretPath.filename().u8string();
+    uint16_t    filenameLen = static_cast<uint16_t>(filename.size());
 
-    // 3. Check capacity early (before encrypting)
-    // Rough estimate: payload = header overhead + encrypted size (~secretBytes + 48 for salt/iv/padding)
-    size_t estimatedPayload = 4 + 1 + 2 + secretFilePath.size() + secretBytes.size() + 64;
+    // Early capacity check before encrypting
+    size_t estimatedPayload = 4 + 1 + 2 + filename.size() + secretBytes.size() + 64;
     if (estimatedPayload > maxEmbeddableBytes(pixels.size()))
     {
-        std::cout << "ERROR: Image too small for this file.\n"
-                  << "  Image capacity : " << maxEmbeddableBytes(pixels.size()) << " bytes\n"
-                  << "  Estimated need : " << estimatedPayload << " bytes\n"
-                  << "  Use a larger carrier image." << std::endl;
+        std::cout << "ERROR: Image too small.\n"
+                  << "  Capacity : " << maxEmbeddableBytes(pixels.size()) << " bytes\n"
+                  << "  Needed   : " << estimatedPayload << " bytes" << std::endl;
         return false;
     }
 
-    // 4. Build plaintext blob: [filename_len(2)][filename][filedata]
-    uint16_t filenameLen = static_cast<uint16_t>(filename.size());
-
+    // Build plaintext blob: [filename_len(2)][filename][filedata]
     std::vector<uint8_t> plainBlob;
-    // filename length (2 bytes, big-endian)
     plainBlob.push_back(static_cast<uint8_t>(filenameLen >> 8));
     plainBlob.push_back(static_cast<uint8_t>(filenameLen & 0xFF));
-    // filename
     plainBlob.insert(plainBlob.end(), filename.begin(), filename.end());
-    // actual file bytes
     plainBlob.insert(plainBlob.end(), secretBytes.begin(), secretBytes.end());
 
-    // 5. Encrypt the entire blob (filename + filedata together)
+    // Encrypt the blob
     std::vector<uint8_t> encrypted = encryptData(plainBlob, password);
     if (encrypted.empty())
     {
@@ -85,51 +125,49 @@ bool embedVault(const std::string& carrierImagePath,
         return false;
     }
 
-    // 6. Build final payload: [magic][version][encrypted blob]
+    // Build final payload: [SISF][version][encrypted blob]
     std::vector<uint8_t> payload;
     payload.insert(payload.end(), MAGIC, MAGIC + 4);
     payload.push_back(VERSION);
     payload.insert(payload.end(), encrypted.begin(), encrypted.end());
 
+    // Final capacity check with real payload size
     if (payload.size() * 8 + 32 > pixels.size())
     {
-        std::cout << "ERROR: Payload is too large for this image.\n"
-                  << "  Image capacity : " << maxEmbeddableBytes(pixels.size()) << " bytes\n"
-                  << "  Payload size   : " << payload.size() << " bytes" << std::endl;
+        std::cout << "ERROR: Payload too large.\n"
+                  << "  Capacity : " << maxEmbeddableBytes(pixels.size()) << " bytes\n"
+                  << "  Payload  : " << payload.size() << " bytes" << std::endl;
         return false;
     }
 
-    // 7. Embed into pixels
+    // Embed payload into image pixels
     embedData(pixels, payload);
 
-    // 8. Write output image
-    // Make sure the output directory exists
-    fs::path outPath(outputImagePath);
-    if (outPath.has_parent_path())
-        fs::create_directories(outPath.parent_path());
+    // Create output directory if needed and save image
+    if (outputPath.has_parent_path())
+        fs::create_directories(outputPath.parent_path());
 
-    if (!stbi_write_png(outputImagePath.c_str(), width, height, 3, pixels.data(), width * 3))
+    if (!saveImage(outputPath, width, height, pixels))
     {
-        std::cout << "ERROR: Could not write output image: " << outputImagePath << std::endl;
+        std::cout << "ERROR: Could not write output image." << std::endl;
         return false;
     }
 
-    std::cout << "Vault embedded successfully.\n"
-              << "  File    : " << filename << " (" << secretBytes.size() << " bytes)\n"
-              << "  Output  : " << outputImagePath << std::endl;
+    std::cout << "Embedded: " << filename << " (" << secretBytes.size() << " bytes) -> "
+              << outputImagePath << std::endl;
     return true;
 }
-
-// extractVault
 
 VaultResult extractVault(const std::string& stegoImagePath,
                           const std::string& password)
 {
     VaultResult result{false, "", {}, ""};
 
-    // 1. Load stego image
+    fs::path stegoPath = fs::u8path(stegoImagePath);
+
+    // Load stego image
     int width, height, channels;
-    uint8_t* rawPixels = stbi_load(stegoImagePath.c_str(), &width, &height, &channels, 3);
+    uint8_t* rawPixels = loadImage(stegoPath, &width, &height, &channels);
     if (!rawPixels)
     {
         result.error = "Could not load image: " + stegoImagePath;
@@ -139,15 +177,15 @@ VaultResult extractVault(const std::string& stegoImagePath,
     std::vector<uint8_t> pixels(rawPixels, rawPixels + (static_cast<size_t>(width) * height * 3));
     stbi_image_free(rawPixels);
 
-    // 2. Extract raw payload
+    // Extract raw payload from pixel LSBs
     std::vector<uint8_t> payload = extractData(pixels);
-    if (payload.size() < 7) // minimum: 4 magic + 1 version + 2 filename_len
+    if (payload.size() < 6)
     {
-        result.error = "No vault found in this image (payload too small).";
+        result.error = "No vault found in this image.";
         return result;
     }
 
-    // 3. Check magic bytes
+    // Check magic bytes
     if (payload[0] != MAGIC[0] || payload[1] != MAGIC[1] ||
         payload[2] != MAGIC[2] || payload[3] != MAGIC[3])
     {
@@ -155,8 +193,8 @@ VaultResult extractVault(const std::string& stegoImagePath,
         return result;
     }
 
-    // 4. Parse header — new format: [magic(4)][version(1)][encrypted blob]
-    size_t offset = 4;
+    // Parse header: [magic(4)][version(1)][encrypted blob]
+    size_t  offset  = 4;
     uint8_t version = payload[offset++];
 
     if (version != VERSION)
@@ -165,7 +203,7 @@ VaultResult extractVault(const std::string& stegoImagePath,
         return result;
     }
 
-    // 5. Decrypt the entire blob
+    // Decrypt the blob
     std::vector<uint8_t> encryptedBlob(payload.begin() + offset, payload.end());
     std::vector<uint8_t> decrypted = decryptData(encryptedBlob, password);
 
@@ -175,10 +213,10 @@ VaultResult extractVault(const std::string& stegoImagePath,
         return result;
     }
 
-    // 6. Parse decrypted blob: [filename_len(2)][filename][filedata]
+    // Parse decrypted blob: [filename_len(2)][filename][filedata]
     if (decrypted.size() < 2)
     {
-        result.error = "Decrypted blob too small - corrupted vault.";
+        result.error = "Corrupted vault.";
         return result;
     }
 
@@ -187,7 +225,7 @@ VaultResult extractVault(const std::string& stegoImagePath,
 
     if (offset + filenameLen > decrypted.size())
     {
-        result.error = "Filename length corrupted.";
+        result.error = "Corrupted filename in vault.";
         return result;
     }
 
