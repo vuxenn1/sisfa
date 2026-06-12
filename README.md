@@ -16,7 +16,8 @@ Two security layers: **AES-256 encryption** (password) + **LSB steganography** (
 - CMake 3.20+ 
 - GCC/G++
 - OpenSSL  
-- On Windows (MSYS64): `pacman -S mingw-w64-ucrt-x86_64-openssl`
+- Qt6 (Core, Widgets)
+- On Windows (MSYS64): `pacman -S mingw-w64-ucrt-x86_64-openssl mingw-w64-ucrt-x86_64-qt6`
 
 ```bash
 cmake -B ./build
