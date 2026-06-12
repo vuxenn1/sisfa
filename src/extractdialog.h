@@ -4,12 +4,14 @@
 #include <QPushButton>
 #include <QLabel>
 
+class MainWindow;
+
 class ExtractDialog : public QDialog
 {
     Q_OBJECT
 
 public:
-    explicit ExtractDialog(QWidget* parent = nullptr);
+    explicit ExtractDialog(MainWindow* parent = nullptr);
 
 private slots:
     void onBrowseStego();
@@ -17,6 +19,8 @@ private slots:
     void onExtract();
 
 private:
+    MainWindow*  mainWindow;
+
     QLineEdit*   stegoEdit;
     QLineEdit*   passwordEdit;
     QLineEdit*   outputEdit;

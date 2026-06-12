@@ -1,4 +1,5 @@
 #include "extractdialog.h"
+#include "mainwindow.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QFileDialog>
@@ -7,8 +8,9 @@
 #include <filesystem>
 #include "vault.h"
 
-ExtractDialog::ExtractDialog(QWidget* parent)
+ExtractDialog::ExtractDialog(MainWindow* parent)
     : QDialog(parent)
+    , mainWindow(parent)
 {
     setWindowTitle("Extract File");
     setMinimumWidth(480);
@@ -95,6 +97,9 @@ void ExtractDialog::onBrowseStego()
 
     if (path.isEmpty()) return;
     stegoEdit->setText(path);
+
+    // Update the main window preview
+    mainWindow->updateImagePreview(path);
 }
 
 void ExtractDialog::onBrowseOutput()
@@ -113,19 +118,19 @@ void ExtractDialog::onExtract()
 {
     if (stegoEdit->text().isEmpty())
     {
-        statusLabel->setStyleSheet("color: #d20f39;");
+        statusLabel->setStyleSheet("color: #ff6b6b;");
         statusLabel->setText("Please select a stego image.");
         return;
     }
     if (passwordEdit->text().isEmpty())
     {
-        statusLabel->setStyleSheet("color: #d20f39;");
+        statusLabel->setStyleSheet("color: #ff6b6b;");
         statusLabel->setText("Please enter a password.");
         return;
     }
 
     extractBtn->setEnabled(false);
-    statusLabel->setStyleSheet("color: #6c6f85;");
+    statusLabel->setStyleSheet("color: #9a96a8;");
     statusLabel->setText("Extracting...");
 
     VaultResult result = extractVault(
@@ -146,7 +151,7 @@ void ExtractDialog::onExtract()
         std::ofstream f(outPath, std::ios::binary);
         f.write(reinterpret_cast<const char*>(result.data.data()), result.data.size());
 
-        statusLabel->setStyleSheet("color: #40a02b;");
+        statusLabel->setStyleSheet("color: #5fd17a;");
         statusLabel->setText(
             QString("File extracted successfully!\nSaved to: %1/%2\nSize: %3 bytes")
                 .arg(outputFolder)
@@ -156,7 +161,7 @@ void ExtractDialog::onExtract()
     }
     else
     {
-        statusLabel->setStyleSheet("color: #d20f39;");
+        statusLabel->setStyleSheet("color: #ff6b6b;");
         statusLabel->setText(QString::fromStdString("Error: " + result.error));
     }
 }
@@ -165,55 +170,56 @@ void ExtractDialog::setupStyles()
 {
     setStyleSheet(R"(
         QDialog {
-            background-color: #eff1f5;
+            background-color: #16161e;
         }
 
         QLabel#dialogTitle {
             font-size: 18px;
             font-weight: bold;
-            color: #ea76cb;
+            color: #ff4f9e;
         }
 
         QLabel#fieldLabel {
             font-size: 12px;
-            color: #6c6f85;
+            color: #9a96a8;
         }
 
         QLineEdit {
-            background-color: #e6e9ef;
-            color: #4c4f69;
-            border: 1px solid #ccd0da;
+            background-color: #1f1f29;
+            color: #e8e6f0;
+            border: 1px solid #34344a;
             border-radius: 4px;
             padding: 6px 10px;
             font-size: 13px;
         }
 
         QLineEdit:focus {
-            border-color: #ea76cb;
+            border-color: #4ea8ff;
         }
 
         QLineEdit:read-only {
-            background-color: #dce0e8;
-            color: #6c6f85;
+            background-color: #1a1a22;
+            color: #6f6c7a;
         }
 
         QPushButton#browseButton {
-            background-color: #ccd0da;
-            color: #4c4f69;
-            border: 1px solid #bcc0cc;
+            background-color: #1f1f29;
+            color: #e8e6f0;
+            border: 1px solid #34344a;
             border-radius: 4px;
             padding: 6px;
             font-size: 12px;
         }
 
         QPushButton#browseButton:hover {
-            background-color: #bcc0cc;
-            border-color: #ea76cb;
+            background-color: #29293a;
+            border-color: #4ea8ff;
+            color: #6fbcff;
         }
 
         QPushButton#actionButton {
-            background-color: #ea76cb;
-            color: #eff1f5;
+            background-color: #ff4f9e;
+            color: #16161e;
             border: none;
             border-radius: 6px;
             font-size: 14px;
@@ -221,17 +227,21 @@ void ExtractDialog::setupStyles()
         }
 
         QPushButton#actionButton:hover {
-            background-color: #f2a9dc;
+            background-color: #ff77b5;
+        }
+
+        QPushButton#actionButton:pressed {
+            background-color: #d63d82;
         }
 
         QPushButton#actionButton:disabled {
-            background-color: #ccd0da;
-            color: #9ca0b0;
+            background-color: #29293a;
+            color: #5a5868;
         }
 
         QLabel#statusLabel {
             font-size: 12px;
-            color: #6c6f85;
+            color: #9a96a8;
         }
     )");
 }
