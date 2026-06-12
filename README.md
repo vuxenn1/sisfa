@@ -25,7 +25,11 @@ cmake --build ./build
 ```
 ## Run
 ```bash
-./build/SISFA.exe
+./build/SISFA_GUI.exe
+```
+or
+```bash
+./build/SISFA_CLI.exe
 ```
 * Run from the project root. 
 * Options: embed file, extract file, check image capacity.
