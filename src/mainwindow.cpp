@@ -144,21 +144,21 @@ void MainWindow::setupStyles()
 {
     qApp->setStyleSheet(R"(
         QWidget {
-            background-color: #1e1e2e;
-            color: #cdd6f4;
+            background-color: #eff1f5;
+            color: #4c4f69;
             font-family: Segoe UI;
             font-size: 13px;
         }
 
         QWidget#rightPanel {
-            background-color: #181825;
-            border-left: 1px solid #313244;
+            background-color: #e6e9ef;
+            border-left: 1px solid #ccd0da;
         }
 
         QPushButton#primaryButton {
-            background-color: #313244;
-            color: #cdd6f4;
-            border: 1px solid #45475a;
+            background-color: #ccd0da;
+            color: #4c4f69;
+            border: 1px solid #bcc0cc;
             border-radius: 6px;
             font-size: 14px;
             font-weight: bold;
@@ -166,43 +166,43 @@ void MainWindow::setupStyles()
         }
 
         QPushButton#primaryButton:hover {
-            background-color: #45475a;
-            border-color: #89b4fa;
+            background-color: #bcc0cc;
+            border-color: #ea76cb;
         }
 
         QPushButton#primaryButton:pressed {
-            background-color: #89b4fa;
-            color: #1e1e2e;
+            background-color: #ea76cb;
+            color: #eff1f5;
         }
 
         QLabel#titleLabel {
             font-size: 28px;
             font-weight: bold;
-            color: #89b4fa;
+            color: #ea76cb;
         }
 
         QLabel#subtitleLabel {
             font-size: 12px;
-            color: #6c7086;
+            color: #6c6f85;
         }
 
         QLabel#descLabel {
             font-size: 11px;
-            color: #6c7086;
+            color: #6c6f85;
             padding-left: 2px;
         }
 
         QLabel#infoLabel {
             font-size: 11px;
-            color: #6c7086;
-            border-top: 1px solid #313244;
+            color: #6c6f85;
+            border-top: 1px solid #ccd0da;
             padding-top: 12px;
         }
 
         QLabel#previewLabel {
             font-size: 48px;
             font-weight: bold;
-            color: #313244;
+            color: #ccd0da;
         }
     )");
 }

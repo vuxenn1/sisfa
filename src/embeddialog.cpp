@@ -101,12 +101,12 @@ void EmbedDialog::onEmbed()
 
     if (ok)
     {
-        statusLabel->setStyleSheet("color: #a6e3a1;");
+        statusLabel->setStyleSheet("color: #40a02b;");
         statusLabel->setText("File embedded successfully!\nSaved to: " + output);
     }
     else
     {
-        statusLabel->setStyleSheet("color: #f38ba8;");
+        statusLabel->setStyleSheet("color: #d20f39;");
         statusLabel->setText("Embedding failed. Check image capacity.");
     }
 }
@@ -115,55 +115,55 @@ void EmbedDialog::setupStyles()
 {
     setStyleSheet(R"(
         QDialog {
-            background-color: #1e1e2e;
+            background-color: #eff1f5;
         }
 
         QLabel#dialogTitle {
             font-size: 18px;
             font-weight: bold;
-            color: #89b4fa;
+            color: #ea76cb;
         }
 
         QLabel#fieldLabel {
             font-size: 12px;
-            color: #6c7086;
+            color: #6c6f85;
         }
 
         QLineEdit {
-            background-color: #313244;
-            color: #cdd6f4;
-            border: 1px solid #45475a;
+            background-color: #e6e9ef;
+            color: #4c4f69;
+            border: 1px solid #ccd0da;
             border-radius: 4px;
             padding: 6px 10px;
             font-size: 13px;
         }
 
         QLineEdit:focus {
-            border-color: #89b4fa;
+            border-color: #ea76cb;
         }
 
         QLineEdit:read-only {
-            background-color: #181825;
-            color: #6c7086;
+            background-color: #dce0e8;
+            color: #6c6f85;
         }
 
         QPushButton#browseButton {
-            background-color: #313244;
-            color: #cdd6f4;
-            border: 1px solid #45475a;
+            background-color: #ccd0da;
+            color: #4c4f69;
+            border: 1px solid #bcc0cc;
             border-radius: 4px;
             padding: 6px;
             font-size: 12px;
         }
 
         QPushButton#browseButton:hover {
-            background-color: #45475a;
-            border-color: #89b4fa;
+            background-color: #bcc0cc;
+            border-color: #ea76cb;
         }
 
         QPushButton#actionButton {
-            background-color: #89b4fa;
-            color: #1e1e2e;
+            background-color: #ea76cb;
+            color: #eff1f5;
             border: none;
             border-radius: 6px;
             font-size: 14px;
@@ -171,17 +171,17 @@ void EmbedDialog::setupStyles()
         }
 
         QPushButton#actionButton:hover {
-            background-color: #b4d0ff;
+            background-color: #f2a9dc;
         }
 
         QPushButton#actionButton:disabled {
-            background-color: #45475a;
-            color: #6c7086;
+            background-color: #ccd0da;
+            color: #9ca0b0;
         }
 
         QLabel#statusLabel {
             font-size: 12px;
-            color: #6c7086;
+            color: #6c6f85;
         }
     )");
 }
